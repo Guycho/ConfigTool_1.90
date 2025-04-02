@@ -690,12 +690,7 @@ void Widget::on_writeBinary_clicked() {
           another_eeprom_out.append(eeprom_buffer->at(i));
         }
         another_eeprom_out[00] = 0x01;
-        if (ui->crawlerFlash->isChecked()) {
-          sendFirstEeprom(1);
-          resetESC();
-          return;
-        }else{
-        if ((input_buffer->at(1) < (char)0x03) || (eeprom_buffer->at(2) == char(0x00))) { // no eeprom ever sent, will be set to zero at
+        if ((eeprom_buffer->at(1) < (char)0x03) || (eeprom_buffer->at(2) == char(0x00))) { // no eeprom ever sent, will be set to zero at
                             // beggining of flash.
             sendFirstEeprom(0);
           resetESC();
@@ -732,7 +727,7 @@ void Widget::on_writeBinary_clicked() {
         break;
         }
         }
-      }
+
     }
   }
   qInfo("what is going on? size :  %d ", sizeofBin);
@@ -1112,7 +1107,7 @@ if ((input_buffer->at(0) == (char)0x01)) {
     } else {
       ui->stuckProtectionBox->setChecked(false);
     }
-    ui->timingAdvanceLCD->display((input_buffer->at(23))*0.9375);
+    ui->timingAdvanceLCD->display(((input_buffer->at(23))-10)*0.9375);
     ui->timingAdvanceSlider->setValue(input_buffer->at(23));
     ui->pwmFreqSlider->setValue((uint8_t)input_buffer->at(24));
     ui->startupPowerSlider->setValue((uint8_t)input_buffer->at(25));
@@ -1697,7 +1692,7 @@ void Widget::on_startupPowerSlider_valueChanged(int value) {
 }
 
 void Widget::on_timingAdvanceSlider_valueChanged(int value) {
-  ui->timingAdvanceLCD->display(value * .9375);
+  ui->timingAdvanceLCD->display((value - 10) * .9375);
 }
 
 void Widget::on_pwmFreqSlider_valueChanged(int value) {
@@ -2279,7 +2274,7 @@ void Widget::on_loadConfigButton_clicked()
     } else {
       ui->stuckProtectionBox->setChecked(false);
     }
-    ui->timingAdvanceLCD->display((fileBuffer.at(23))*0.9375);
+    ui->timingAdvanceLCD->display(((fileBuffer.at(23))-10)*0.9375);
     ui->timingAdvanceSlider->setValue(fileBuffer.at(23));
     ui->pwmFreqSlider->setValue(fileBuffer.at(24));
     ui->startupPowerSlider->setValue((uint8_t)fileBuffer.at(25));
