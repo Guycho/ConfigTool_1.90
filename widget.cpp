@@ -28,7 +28,7 @@ Widget::Widget(QWidget *parent)
   ui->setupUi(this);
   ui->tabWidget->removeTab(4); // todo make these visible
   ui->tabWidget->removeTab(4);   // remove led tab for now
-  this->setWindowTitle("ESC Config Tool 1.91 - for firmware version 2.19 and higher");
+  this->setWindowTitle("ESC Config Tool 1.92 - for firmware version 2.19 and higher");
 
   serialInfoStuff();
 
@@ -938,11 +938,14 @@ bool Widget::connectMotor(uint8_t motor) {
     m_serial->waitForBytesWritten(500);
     while (m_serial->waitForReadyRead(500)) {
     }
+
     QByteArray flash = m_serial->readAll();
-    if(flash.size() == 55){
+
+    qInfo("size of flash 1 : %d ", flash.size());
+    if(flash.size() == 87){
     flash.remove(0, 4);
     }
-     qInfo("size of flash : %d ", flash.size());
+     qInfo("size of flash 2: %d ", flash.size());
     if (flash[flash.size() - 1] == char(0x30)) {
       qInfo("good ack read !!!!");
     } else {
