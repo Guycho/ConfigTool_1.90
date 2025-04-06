@@ -25,7 +25,7 @@ uint8_t air_starteeprom[48] ={
     0x01,      //complementary pwm byte 20
     0x01,      //variable pwm frequency 21
     0x01,      //stuck rotor protection 22
-    0x10,      // timing advance x0.9375, ei 16 = 15 degrees byte 23
+    0x1A,      // timing advance x0.9375, ei 16 = 15 degrees byte 23
     0x18,      // pwm frequency mutiples of 1k..  byte 24 default 24khz 0x18
     0x64,      // startup power 50-150 percent default 100 percent 0x64 byte 25
     0x37,      // motor KV in increments of 40 default 55 = 2200kv

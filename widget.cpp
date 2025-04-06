@@ -28,7 +28,7 @@ Widget::Widget(QWidget *parent)
   ui->setupUi(this);
   ui->tabWidget->removeTab(4); // todo make these visible
   ui->tabWidget->removeTab(4);   // remove led tab for now
-  this->setWindowTitle("ESC Config Tool 1.90 - for firmware version 2.19 and higher");
+  this->setWindowTitle("ESC Config Tool 1.91 - for firmware version 2.19 and higher");
 
   serialInfoStuff();
 
