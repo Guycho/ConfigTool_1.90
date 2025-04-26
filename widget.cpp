@@ -28,7 +28,7 @@ Widget::Widget(QWidget *parent)
   ui->setupUi(this);
   ui->tabWidget->removeTab(4); // todo make these visible
   ui->tabWidget->removeTab(4);   // remove led tab for now
-  this->setWindowTitle("ESC Config Tool 1.92 - for firmware version 2.19 and higher");
+  this->setWindowTitle("ESC Config Tool 1.93 - for firmware version 2.19 and higher");
 
   serialInfoStuff();
 
@@ -1065,9 +1065,9 @@ if ((input_buffer->at(0) == (char)0x01)) {
       ui->disableStickCalibCheckbox->setChecked(false);
     }
     ui->absoluteVoltageSlider->setValue((uint8_t)(input_buffer->at(8)));
-    ui->currentLimitPedit->setText(QString::number((uint8_t)(input_buffer->at(9))));
+    ui->currentLimitPedit->setText(QString::number((uint8_t)(input_buffer->at(9))*2));
     ui->currentLimitIedit->setText(QString::number((uint8_t)(input_buffer->at(10))));
-    ui->currentLimitDedit->setText(QString::number((uint8_t)(input_buffer->at(11))));
+    ui->currentLimitDedit->setText(QString::number((uint8_t)(input_buffer->at(11))*2));
     ui->activeBrakeSlider->setValue((uint8_t)(input_buffer->at(12)));
 
 
@@ -1460,9 +1460,9 @@ void Widget::on_writeEEPROM_clicked() {
   eeprom_out[6] = ui->minDutySlider->value();
   eeprom_out[7] = ui->disableStickCalibCheckbox->isChecked();
   eeprom_out[8] = ui->absoluteVoltageSlider->value();
-  eeprom_out[9] = ui->currentLimitPedit->text().toInt();
+  eeprom_out[9] = (ui->currentLimitPedit->text().toInt())/2;
   eeprom_out[10] = ui->currentLimitIedit->text().toInt();
-  eeprom_out[11] = ui->currentLimitDedit->text().toInt();
+  eeprom_out[11] = (ui->currentLimitDedit->text().toInt())/2;
   eeprom_out[12] = ui->activeBrakeSlider->value();
 
   eeprom_out[17] = (char)ui->rvCheckBox->isChecked();
@@ -1849,10 +1849,10 @@ void Widget::on_servoDeadBandSlider_valueChanged(int value) {
 
 void Widget::on_lowVoltageLineEdit_editingFinished() {
   ui->lowVoltageThresholdSlider->setValue(
-      ((ui->lowVoltageLineEdit->text()).toInt()) - 250);
+      (ui->lowVoltageLineEdit->text().toInt()*100));
 }
 void Widget::on_lowVoltageThresholdSlider_valueChanged(int value) {
-  ui->lowVoltageLineEdit->setText(QString::number(value + 250));
+  ui->lowVoltageLineEdit->setText(QString::number((float)(value + 250)/100));
 }
 
 void Widget::on_initMotor1_3_clicked() { on_initMotor1_clicked(); }
@@ -2108,9 +2108,9 @@ void Widget::on_saveConfigButton_clicked()
   eeprom_out[6] = ui->minDutySlider->value();
   eeprom_out[7] = ui->disableStickCalibCheckbox->isChecked();
   eeprom_out[8] = ui->absoluteVoltageSlider->value();
-  eeprom_out[9] = ui->currentLimitPedit->text().toInt();
+  eeprom_out[9] = (ui->currentLimitPedit->text().toInt())/2;
   eeprom_out[10] = ui->currentLimitIedit->text().toInt();
-  eeprom_out[11] = ui->currentLimitDedit->text().toInt();
+  eeprom_out[11] = (ui->currentLimitDedit->text().toInt())/2;
   eeprom_out[12] = ui->activeBrakeSlider->value();
 
   eeprom_out[17] = (char)ui->rvCheckBox->isChecked();
@@ -2236,9 +2236,9 @@ void Widget::on_loadConfigButton_clicked()
       ui->disableStickCalibCheckbox->setChecked(false);
     }
     ui->absoluteVoltageSlider->setValue((uint8_t)(fileBuffer.at(8)));
-    ui->currentLimitPedit->setText(QString::number((uint8_t)(fileBuffer.at(9))));
+    ui->currentLimitPedit->setText(QString::number((uint8_t)(fileBuffer.at(9))*2));
     ui->currentLimitIedit->setText(QString::number((uint8_t)(fileBuffer.at(10))));
-    ui->currentLimitDedit->setText(QString::number((uint8_t)(fileBuffer.at(11))));
+    ui->currentLimitDedit->setText(QString::number((uint8_t)(fileBuffer.at(11))*2));
     ui->activeBrakeSlider->setValue((uint8_t)(fileBuffer.at(12)));
 
             if(fileBuffer.at(17) == 0x01){
@@ -2540,5 +2540,38 @@ void Widget::on_absoluteVoltageSlider_valueChanged(int value)
 {
   QString text = QString::number(value);
   ui->absoluateVoltageLineedit->setText(text);
+}
+
+
+void Widget::on_currentLimitPedit_editingFinished()
+{
+  QString arg1 = ui->currentLimitPedit->text();
+  if(arg1.toInt() <= 500 && arg1.toInt() >= 0){
+  }else{
+  qInfo("invalid input");
+  ui->currentLimitPedit->setText("100");
+  }
+}
+
+
+void Widget::on_currentLimitDedit_editingFinished()
+{
+      QString arg1 = ui->currentLimitDedit->text();
+  if(arg1.toInt() <= 500 && arg1.toInt() >=0){
+  }else{
+  qInfo("invalid input");
+  ui->currentLimitDedit->setText("100");
+  }
+}
+
+
+void Widget::on_currentLimitIedit_editingFinished()
+{
+      QString arg1 = ui->currentLimitIedit->text();
+  if(arg1.toInt() <= 255 && arg1.toInt() >=0){
+  }else{
+  qInfo("invalid input");
+  ui->currentLimitIedit->setText("0");
+  }
 }
 

@@ -192,6 +192,12 @@ private slots:
 
     void on_absoluteVoltageSlider_valueChanged(int value);
 
+    void on_currentLimitPedit_editingFinished();
+
+    void on_currentLimitDedit_editingFinished();
+
+    void on_currentLimitIedit_editingFinished();
+
 private:
 
 //    void initActionsConnections();
