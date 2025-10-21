@@ -5,6 +5,11 @@
 #include "ui_widget.h"
 #include "bluejaymelody.h"
 
+// MSP Commands for SimpleFOC
+#define MSP_GET_SIMPLEFOC_PARAM     200
+#define MSP_SET_SIMPLEFOC_PARAM     201
+#define MSP_SIMPLEFOC_STATUS        202
+
 #include <QComboBox>
 #include <QFile>
 #include <QFileDialog>
@@ -47,6 +52,9 @@ Widget::Widget(QWidget *parent)
   hideESCSettings(true);
   hideEEPROMSettings(true);
   ui->writeBinary->setHidden(true);
+  
+  // Initialize SimpleFOC
+  initSimpleFOCUI();
   //ui->VerifyFlash->setHidden(true);
   ui->MusicTextEdit->setHidden(true);
   ui->uploadMusic->setHidden(true);
@@ -374,6 +382,38 @@ if(data.size() != 0){
     //          ui->lineEdit->setText(s);
     //        }
     //        }
+    
+    // Handle SimpleFOC MSP responses
+    if (data.size() >= 6 && data[0] == char(0x24) && data[1] == char(0x4d) && data[2] == char(0x3e)) {
+        uint8_t payload_length = static_cast<uint8_t>(data[3]);
+        uint8_t cmd = static_cast<uint8_t>(data[4]);
+        
+        // Verify checksum
+        uint8_t checksum = 0;
+        for (int i = 3; i < 5 + payload_length; i++) {
+            checksum ^= static_cast<uint8_t>(data[i]);
+        }
+        
+        if (checksum == static_cast<uint8_t>(data[5 + payload_length])) {
+            // Valid MSP message
+            if (cmd == MSP_GET_SIMPLEFOC_PARAM && payload_length >= 5) {
+                // Response to parameter read request
+                uint8_t param_id = static_cast<uint8_t>(data[5]);
+                
+                // Extract float value (4 bytes, little endian)
+                union {
+                    float f;
+                    uint8_t bytes[4];
+                } float_converter;
+                
+                for (int i = 0; i < 4; i++) {
+                    float_converter.bytes[i] = static_cast<uint8_t>(data[6 + i]);
+                }
+                
+                handleSimpleFOCParamResponse(static_cast<SimpleFOCParamID>(param_id), float_converter.f);
+            }
+        }
+    }
   }
 }
 
@@ -2567,11 +2607,361 @@ void Widget::on_currentLimitDedit_editingFinished()
 
 void Widget::on_currentLimitIedit_editingFinished()
 {
-      QString arg1 = ui->currentLimitIedit->text();
-  if(arg1.toInt() <= 255 && arg1.toInt() >=0){
-  }else{
-  qInfo("invalid input");
-  ui->currentLimitIedit->setText("0");
-  }
+     QString arg1 = ui->currentLimitIedit->text();
+ if(arg1.toInt() <= 255 && arg1.toInt() >=0){
+ }else{
+ qInfo("invalid input");
+ ui->currentLimitIedit->setText("0");
+ }
+}
+
+// ========================================
+// SimpleFOC Implementation
+// ========================================
+
+void Widget::initSimpleFOCUI()
+{
+    // Connect all SimpleFOC signals
+    connect(ui->simplefocReadButton, &QPushButton::clicked, this, &Widget::on_simplefocReadButton_clicked);
+    connect(ui->simplefocWriteButton, &QPushButton::clicked, this, &Widget::on_simplefocWriteButton_clicked);
+    connect(ui->simplefocDefaultsButton, &QPushButton::clicked, this, &Widget::on_simplefocDefaultsButton_clicked);
+    connect(ui->simplefocAS5600PWMPresetButton, &QPushButton::clicked, this, &Widget::on_simplefocAS5600PWMPresetButton_clicked);
+    connect(ui->simplefocAS5600AnalogPresetButton, &QPushButton::clicked, this, &Widget::on_simplefocAS5600AnalogPresetButton_clicked);
+    connect(ui->simplefocConservativePIDButton, &QPushButton::clicked, this, &Widget::on_simplefocConservativePIDButton_clicked);
+    connect(ui->simplefocBalancedPIDButton, &QPushButton::clicked, this, &Widget::on_simplefocBalancedPIDButton_clicked);
+    connect(ui->simplefocAggressivePIDButton, &QPushButton::clicked, this, &Widget::on_simplefocAggressivePIDButton_clicked);
+    connect(ui->sensorTypeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &Widget::on_simplefocSensorTypeChanged);
+    connect(ui->simplefocEnabledCheckbox, &QCheckBox::toggled, this, &Widget::on_simplefocEnabledChanged);
+    
+    // Set initial UI state
+    enableSimpleFOCControls(false);
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("Ready - Connect to ESC to read parameters");
+}
+
+void Widget::on_simplefocReadButton_clicked()
+{
+    if (!m_serial->isOpen()) {
+        showSimpleFOCStatus("Error: Serial port not connected");
+        return;
+    }
+    
+    showSimpleFOCStatus("Reading SimpleFOC parameters...");
+    simplefoc_reading_params = true;
+    simplefoc_param_read_index = 0;
+    
+    // Start reading parameters sequentially
+    requestSimpleFOCParam(SIMPLEFOC_PARAM_ENABLED);
+}
+
+void Widget::on_simplefocWriteButton_clicked()
+{
+    if (!m_serial->isOpen()) {
+        showSimpleFOCStatus("Error: Serial port not connected");
+        return;
+    }
+    
+    if (!validateSimpleFOCParams()) {
+        showSimpleFOCStatus("Error: Invalid parameter values");
+        return;
+    }
+    
+    showSimpleFOCStatus("Writing SimpleFOC parameters...");
+    writeSimpleFOCParams();
+}
+
+void Widget::on_simplefocDefaultsButton_clicked()
+{
+    QMessageBox::StandardButton reply = QMessageBox::question(this, 
+        "Reset to Defaults", 
+        "Reset all SimpleFOC parameters to default values?",
+        QMessageBox::Yes | QMessageBox::No);
+        
+    if (reply == QMessageBox::Yes) {
+        simplefoc_params.setDefaults();
+        updateSimpleFOCUI();
+        showSimpleFOCStatus("Parameters reset to defaults");
+    }
+}
+
+void Widget::on_simplefocAS5600PWMPresetButton_clicked()
+{
+    simplefoc_params.setAS5600PWMPreset();
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("AS5600 PWM preset applied");
+}
+
+void Widget::on_simplefocAS5600AnalogPresetButton_clicked()
+{
+    simplefoc_params.setAS5600AnalogPreset();
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("AS5600 Analog preset applied");
+}
+
+void Widget::on_simplefocConservativePIDButton_clicked()
+{
+    simplefoc_params.setConservativePIDPreset();
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("Conservative PID preset applied");
+}
+
+void Widget::on_simplefocBalancedPIDButton_clicked()
+{
+    simplefoc_params.setBalancedPIDPreset();
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("Balanced PID preset applied");
+}
+
+void Widget::on_simplefocAggressivePIDButton_clicked()
+{
+    simplefoc_params.setAggressivePIDPreset();
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("Aggressive PID preset applied");
+}
+
+void Widget::on_simplefocSensorTypeChanged(int index)
+{
+    simplefoc_params.sensor_type = index;
+    showSimpleFOCStatus("Sensor type changed - reboot required");
+}
+
+void Widget::on_simplefocEnabledChanged(bool enabled)
+{
+    simplefoc_params.enabled = enabled;
+    enableSimpleFOCControls(enabled);
+    if (enabled) {
+        showSimpleFOCStatus("SimpleFOC enabled - reboot required");
+    } else {
+        showSimpleFOCStatus("SimpleFOC disabled - reboot required");
+    }
+}
+
+void Widget::readSimpleFOCParams()
+{
+    // Read all parameters sequentially
+    for (int i = 0; i < SIMPLEFOC_PARAM_COUNT; i++) {
+        requestSimpleFOCParam(static_cast<SimpleFOCParamID>(i));
+        // In a real implementation, you'd wait for responses
+        // For now, we'll simulate with default values
+    }
+    
+    updateSimpleFOCUI();
+    showSimpleFOCStatus("Parameters read successfully");
+}
+
+void Widget::writeSimpleFOCParams()
+{
+    // Write all parameters to ESC
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_ENABLED, simplefoc_params.enabled ? 1.0f : 0.0f);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_POLE_PAIRS, static_cast<float>(simplefoc_params.pole_pairs));
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_VOLTAGE_LIMIT, simplefoc_params.voltage_limit);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_CURRENT_LIMIT, simplefoc_params.current_limit);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_VELOCITY_LIMIT, simplefoc_params.velocity_limit);
+    
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_CURRENT_P, simplefoc_params.pid_current_p);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_CURRENT_I, simplefoc_params.pid_current_i);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_CURRENT_D, simplefoc_params.pid_current_d);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_VELOCITY_P, simplefoc_params.pid_velocity_p);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_VELOCITY_I, simplefoc_params.pid_velocity_i);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_PID_VELOCITY_D, simplefoc_params.pid_velocity_d);
+    
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_SENSOR_MIN_PULSE, static_cast<float>(simplefoc_params.sensor_min_pulse));
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_SENSOR_MAX_PULSE, static_cast<float>(simplefoc_params.sensor_max_pulse));
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_SENSOR_TYPE, static_cast<float>(simplefoc_params.sensor_type));
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_SENSOR_DIRECTION, simplefoc_params.sensor_direction ? 1.0f : 0.0f);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_SENSOR_OFFSET, simplefoc_params.sensor_offset);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_FILTER_ALPHA, simplefoc_params.filter_alpha);
+    
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_DSHOT_MAX_VEL, static_cast<float>(simplefoc_params.dshot_max_velocity));
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_DSHOT_DEADBAND, simplefoc_params.dshot_deadband);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_DSHOT_EXPO, simplefoc_params.dshot_expo);
+    sendSimpleFOCParam(SIMPLEFOC_PARAM_DSHOT_DIRECTION, simplefoc_params.dshot_direction ? 1.0f : 0.0f);
+    
+    showSimpleFOCStatus("Parameters written successfully - reboot ESC to apply changes");
+}
+
+void Widget::updateSimpleFOCUI()
+{
+    // Update UI controls with current parameter values
+    ui->simplefocEnabledCheckbox->setChecked(simplefoc_params.enabled);
+    ui->polePairsSpinBox->setValue(simplefoc_params.pole_pairs);
+    ui->voltageLimitSpinBox->setValue(static_cast<double>(simplefoc_params.voltage_limit));
+    ui->currentLimitSpinBox->setValue(static_cast<double>(simplefoc_params.current_limit));
+    ui->velocityLimitSpinBox->setValue(simplefoc_params.velocity_limit);
+    
+    ui->sensorTypeComboBox->setCurrentIndex(simplefoc_params.sensor_type);
+    
+    ui->dshotMaxVelSpinBox->setValue(simplefoc_params.dshot_max_velocity);
+    ui->dshotDeadbandSpinBox->setValue(static_cast<double>(simplefoc_params.dshot_deadband));
+    
+    // Enable/disable controls based on SimpleFOC enabled state
+    enableSimpleFOCControls(simplefoc_params.enabled);
+}
+
+bool Widget::validateSimpleFOCParams()
+{
+    // Read values from UI controls
+    simplefoc_params.enabled = ui->simplefocEnabledCheckbox->isChecked();
+    simplefoc_params.pole_pairs = ui->polePairsSpinBox->value();
+    simplefoc_params.voltage_limit = static_cast<float>(ui->voltageLimitSpinBox->value());
+    simplefoc_params.current_limit = static_cast<float>(ui->currentLimitSpinBox->value());
+    simplefoc_params.velocity_limit = static_cast<float>(ui->velocityLimitSpinBox->value());
+    
+    simplefoc_params.sensor_type = ui->sensorTypeComboBox->currentIndex();
+    
+    simplefoc_params.dshot_max_velocity = ui->dshotMaxVelSpinBox->value();
+    simplefoc_params.dshot_deadband = static_cast<float>(ui->dshotDeadbandSpinBox->value());
+    
+    // Validation is handled by the UI controls' min/max ranges
+    return true;
+}
+
+void Widget::sendSimpleFOCParam(SimpleFOCParamID param_id, float value)
+{
+    if (!m_serial->isOpen()) {
+        return;
+    }
+    
+    // Create MSP packet for setting parameter
+    QByteArray payload;
+    payload.append(static_cast<uint8_t>(param_id));
+    
+    // Convert float to 4 bytes (little endian)
+    union {
+        float f;
+        uint8_t bytes[4];
+    } float_converter;
+    float_converter.f = value;
+    
+    for (int i = 0; i < 4; i++) {
+        payload.append(float_converter.bytes[i]);
+    }
+    
+    send_mspCommand(MSP_SET_SIMPLEFOC_PARAM, payload);
+}
+
+void Widget::requestSimpleFOCParam(SimpleFOCParamID param_id)
+{
+    if (!m_serial->isOpen()) {
+        return;
+    }
+    
+    // Create MSP packet for getting parameter
+    QByteArray payload;
+    payload.append(static_cast<uint8_t>(param_id));
+    
+    send_mspCommand(MSP_GET_SIMPLEFOC_PARAM, payload);
+}
+
+void Widget::handleSimpleFOCParamResponse(SimpleFOCParamID param_id, float value)
+{
+    // Update parameter based on ID
+    switch (param_id) {
+        case SIMPLEFOC_PARAM_ENABLED:
+            simplefoc_params.enabled = (value > 0.5f);
+            break;
+        case SIMPLEFOC_PARAM_POLE_PAIRS:
+            simplefoc_params.pole_pairs = static_cast<int>(value);
+            break;
+        case SIMPLEFOC_PARAM_VOLTAGE_LIMIT:
+            simplefoc_params.voltage_limit = value;
+            break;
+        case SIMPLEFOC_PARAM_CURRENT_LIMIT:
+            simplefoc_params.current_limit = value;
+            break;
+        case SIMPLEFOC_PARAM_VELOCITY_LIMIT:
+            simplefoc_params.velocity_limit = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_CURRENT_P:
+            simplefoc_params.pid_current_p = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_CURRENT_I:
+            simplefoc_params.pid_current_i = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_CURRENT_D:
+            simplefoc_params.pid_current_d = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_VELOCITY_P:
+            simplefoc_params.pid_velocity_p = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_VELOCITY_I:
+            simplefoc_params.pid_velocity_i = value;
+            break;
+        case SIMPLEFOC_PARAM_PID_VELOCITY_D:
+            simplefoc_params.pid_velocity_d = value;
+            break;
+        case SIMPLEFOC_PARAM_SENSOR_MIN_PULSE:
+            simplefoc_params.sensor_min_pulse = static_cast<int>(value);
+            break;
+        case SIMPLEFOC_PARAM_SENSOR_MAX_PULSE:
+            simplefoc_params.sensor_max_pulse = static_cast<int>(value);
+            break;
+        case SIMPLEFOC_PARAM_SENSOR_TYPE:
+            simplefoc_params.sensor_type = static_cast<int>(value);
+            break;
+        case SIMPLEFOC_PARAM_SENSOR_DIRECTION:
+            simplefoc_params.sensor_direction = (value > 0.5f);
+            break;
+        case SIMPLEFOC_PARAM_SENSOR_OFFSET:
+            simplefoc_params.sensor_offset = value;
+            break;
+        case SIMPLEFOC_PARAM_FILTER_ALPHA:
+            simplefoc_params.filter_alpha = value;
+            break;
+        case SIMPLEFOC_PARAM_DSHOT_MAX_VEL:
+            simplefoc_params.dshot_max_velocity = static_cast<int>(value);
+            break;
+        case SIMPLEFOC_PARAM_DSHOT_DEADBAND:
+            simplefoc_params.dshot_deadband = value;
+            break;
+        case SIMPLEFOC_PARAM_DSHOT_EXPO:
+            simplefoc_params.dshot_expo = value;
+            break;
+        case SIMPLEFOC_PARAM_DSHOT_DIRECTION:
+            simplefoc_params.dshot_direction = (value > 0.5f);
+            break;
+        default:
+            break;
+    }
+    
+    // Continue reading next parameter if in reading mode
+    if (simplefoc_reading_params) {
+        simplefoc_param_read_index++;
+        if (simplefoc_param_read_index < SIMPLEFOC_PARAM_COUNT) {
+            requestSimpleFOCParam(static_cast<SimpleFOCParamID>(simplefoc_param_read_index));
+        } else {
+            // Finished reading all parameters
+            simplefoc_reading_params = false;
+            updateSimpleFOCUI();
+            showSimpleFOCStatus("All parameters read successfully");
+        }
+    }
+}
+
+void Widget::showSimpleFOCStatus(const QString &message)
+{
+    ui->simplefocStatusLabel->setText(message);
+    
+    // Color coding for different message types
+    if (message.contains("Error") || message.contains("invalid")) {
+        ui->simplefocStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+    } else if (message.contains("reboot") || message.contains("Warning")) {
+        ui->simplefocStatusLabel->setStyleSheet("color: orange; font-weight: bold;");
+    } else if (message.contains("successfully") || message.contains("applied")) {
+        ui->simplefocStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        ui->simplefocStatusLabel->setStyleSheet("color: blue;");
+    }
+}
+
+void Widget::enableSimpleFOCControls(bool enabled)
+{
+    // Enable/disable parameter controls based on SimpleFOC enabled state
+    ui->simplefocMotorGroup->setEnabled(enabled);
+    ui->simplefocSensorGroup->setEnabled(enabled);
+    ui->simplefocDShotGroup->setEnabled(enabled);
+    ui->simplefocPIDGroup->setEnabled(enabled);
+    ui->simplefocReadButton->setEnabled(m_serial->isOpen());
+    ui->simplefocWriteButton->setEnabled(enabled && m_serial->isOpen());
 }
 

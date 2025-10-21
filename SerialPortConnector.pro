@@ -27,6 +27,7 @@ HEADERS += \
     bluejaymelody.h \
     defaults.h \
     fourwayif.h \
+    simplefoc_params.h \
     widget.h
 
 FORMS += \

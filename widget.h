@@ -5,6 +5,7 @@
 #include <QSerialPort>
 #include <QLabel>
 #include <QComboBox>
+#include "simplefoc_params.h"
 
 class OutConsole;
 class FourWayIF;
@@ -198,6 +199,18 @@ private slots:
 
     void on_currentLimitIedit_editingFinished();
 
+    // SimpleFOC slots
+    void on_simplefocReadButton_clicked();
+    void on_simplefocWriteButton_clicked();
+    void on_simplefocDefaultsButton_clicked();
+    void on_simplefocAS5600PWMPresetButton_clicked();
+    void on_simplefocAS5600AnalogPresetButton_clicked();
+    void on_simplefocConservativePIDButton_clicked();
+    void on_simplefocBalancedPIDButton_clicked();
+    void on_simplefocAggressivePIDButton_clicked();
+    void on_simplefocSensorTypeChanged(int index);
+    void on_simplefocEnabledChanged(bool enabled);
+
 private:
 
 //    void initActionsConnections();
@@ -226,6 +239,19 @@ private:
     bool getMusic();
     bool writeMusic();
     void endTimer();
+    
+    // SimpleFOC private methods
+    void initSimpleFOCUI();
+    void readSimpleFOCParams();
+    void writeSimpleFOCParams();
+    void updateSimpleFOCUI();
+    bool validateSimpleFOCParams();
+    void sendSimpleFOCParam(SimpleFOCParamID param_id, float value);
+    void requestSimpleFOCParam(SimpleFOCParamID param_id);
+    void handleSimpleFOCParamResponse(SimpleFOCParamID param_id, float value);
+    void showSimpleFOCStatus(const QString &message);
+    void enableSimpleFOCControls(bool enabled);
+    
     typedef union __attribute__ ((packed)) {
         uint8_t bytes[2];
         uint16_t word;
@@ -243,6 +269,12 @@ private:
    uint8_t retries = 0;
    uint8_t max_retries = 16;
    uint8_t number_of_ports = 0;
+
+   // SimpleFOC members
+   SimpleFOCParams simplefoc_params;
+   bool simplefoc_connected = false;
+   bool simplefoc_reading_params = false;
+   int simplefoc_param_read_index = 0;
 
 //    typedef struct ioMem_s {
 //        uint8_t D_NUM_BYTES;
